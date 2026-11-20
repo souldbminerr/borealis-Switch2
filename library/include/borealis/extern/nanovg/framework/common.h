@@ -9,4 +9,8 @@
 
 #include <switch.h>
 
+#ifdef __SWITCH2__
+#include <drako3d.hpp>
+#else
 #include <deko3d.hpp>
+#endif

@@ -22,7 +22,11 @@ limitations under the License.
 #include <switch.h>
 
 #include <borealis/core/video.hpp>
+#ifdef __SWITCH2__
+#include <drako3d.hpp>
+#else
 #include <deko3d.hpp>
+#endif
 #include <nanovg/dk_renderer.hpp>
 #include <optional>
 

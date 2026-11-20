@@ -1,6 +1,9 @@
 #pragma once
-
+#ifdef __SWITCH2__
+#include <drako3d.hpp>
+#else
 #include <deko3d.hpp>
+#endif
 #include <map>
 #include <memory>
 #include <vector>
