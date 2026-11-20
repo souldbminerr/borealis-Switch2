@@ -43,6 +43,252 @@
 
 using namespace brls::literals;
 
+#ifdef __SWITCH2__
+// Switch 2 selection border: a four-colour wheel (Electric Blue, Cyan,
+// Periwinkle, Pink) rotates around the border ring, matching the system UI
+// and the Ultrahand S2 reference. Cyan and Pink pulse bright<->deep, locked
+// to the rotation (four pulses per turn, full turn every 6 s).
+namespace {
+
+struct S2Wheel
+{
+    float rotFrac; // rotation offset, one full turn every 6 s
+    NVGcolor a[4]; // anchors of the sweep: [0] Electric Blue, [1] Cyan,
+                   // [2] Periwinkle, [3] Pink; they sit (after rotation) at
+                   // s = 0.25, 0.5, 0.75 and 0 respectively.
+};
+
+static NVGcolor s2Lerp(NVGcolor c0, NVGcolor c1, float t)
+{
+    return nvgRGBAf(c0.r + (c1.r - c0.r) * t, c0.g + (c1.g - c0.g) * t,
+        c0.b + (c1.b - c0.b) * t, c0.a + (c1.a - c0.a) * t);
+}
+
+static S2Wheel s2MakeWheel()
+{
+    const double now = (double)brls::getCPUTimeUsec() / 1000000.0;
+    const float rotFrac = (float)fmod(now, 6.0) / 6.0f;
+
+    // Pulse locked to the rotation: bright at the cardinals, deep at the
+    // diagonals; Pink shares Cyan's cadence, lagging 0.2 of a pulse cycle.
+    const float cyanT = 0.5f + 0.5f * cosf(2.0f * NVG_PI * (4.0f * rotFrac));
+    const float pinkT = 0.5f + 0.5f * cosf(2.0f * NVG_PI * (4.0f * rotFrac - 0.2f));
+
+    S2Wheel w;
+    w.rotFrac = rotFrac;
+    w.a[0]    = nvgRGB(0x00, 0x66, 0xFF); // Electric Blue
+    w.a[1]    = s2Lerp(nvgRGB(0xEE, 0xFF, 0xFF), nvgRGB(0xAA, 0xEE, 0xFF), cyanT); // Ice -> Aqua
+    w.a[2]    = nvgRGB(0x88, 0x77, 0xFF); // Periwinkle
+    w.a[3]    = s2Lerp(nvgRGB(0xFF, 0xDD, 0xDD), nvgRGB(0xFF, 0xBB, 0xBB), pinkT); // Soft -> Rose
+    return w;
+}
+
+// Colour of the sweep at perimeter position s in [0,1) (pre-rotation).
+static NVGcolor s2WheelColorAt(const S2Wheel& w, float s, float alpha)
+{
+    s -= w.rotFrac;
+    s -= floorf(s); // wrap to [0,1)
+    const float seg = s * 4.0f;
+    const int i     = (int)seg & 3;
+    const float f   = seg - floorf(seg);
+    NVGcolor c      = s2Lerp(w.a[(i + 3) & 3], w.a[i], f);
+    c.a             = alpha;
+    return c;
+}
+}
+
+// Draws the Switch 2 selection border: a "thickness"-wide ring around the
+// (x, y, width, height) box with the rotating wheel colours flowing along
+// the perimeter. Each side carries an equal quarter of the sweep (top
+// left->right, right top->bottom, bottom right->left, left bottom->top) and
+// the corner arcs are flat-coloured by the adjacent side's endpoint, so
+// every pixel column of a side shares one colour — matching the per-side
+// projection of the system UI reference.
+static void s2DrawWheelBorder(NVGcontext* vg, float x, float y, float width, float height, float thickness, float radius, float alpha)
+{
+    if (width <= 0.0f || height <= 0.0f || alpha <= 0.0f || thickness <= 0.0f)
+        return;
+
+    const S2Wheel wheel = s2MakeWheel();
+    radius = fminf(radius, fminf(width, height) / 2.0f);
+
+    // Centreline of the ring: drawHighlight passes a box already expanded
+    // around the view by padding + strokeWidth/2, and the stroke is centred
+    // on this path — so the ring lies fully outside the view edge.
+    const float cl = x, ct = y;
+    const float cr = x + width, cb = y + height;
+    const float rr  = radius;                                // centreline corner radius
+    const float clx = x + radius, crx = x + width - radius;  // corner centres
+    const float cty = y + radius, cby = y + height - radius;
+    // Straight spans between the corner centres; ~0 turns the shape into a
+    // pill (one axis) or a circle (both).
+    const float spanW = crx - clx;
+    const float spanH = cby - cty;
+
+    nvgSave(vg);
+    nvgLineCap(vg, NVG_BUTT);
+    nvgStrokeWidth(vg, thickness);
+
+    // Every segment is painted ~2 px past both of its ends (along the ring,
+    // colours clamped to its endpoint colours). The colour sweep is
+    // continuous along the ring, so each overlap is invisible — and since
+    // segments are drawn in ring order, the later one always covers the
+    // previous one's anti-aliased end edge. No butt-cap seams, and the
+    // strokes keep nanovg's smooth bezier arcs (no polygonised edges).
+    constexpr float OVERLAP = 2.0f;
+
+    // Straight span as a linear gradient between the wheel colours at its
+    // perimeter endpoints.
+    auto strokeLine = [&](float s0, float s1, float x0, float y0, float x1, float y1) {
+        float dx = x1 - x0, dy = y1 - y0;
+        const float len = sqrtf(dx * dx + dy * dy);
+        if (len < 0.5f)
+            return;
+        dx *= OVERLAP / len;
+        dy *= OVERLAP / len;
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, x0 - dx, y0 - dy);
+        nvgLineTo(vg, x1 + dx, y1 + dy);
+        nvgStrokePaint(vg, nvgLinearGradient(vg, x0, y0, x1, y1,
+            s2WheelColorAt(wheel, s0, alpha), s2WheelColorAt(wheel, s1, alpha)));
+        nvgStroke(vg);
+    };
+
+    // Clockwise arc (y-down) sweeping s0 -> s1, split into sub-arcs of at
+    // most 45 deg so a chord-axis linear gradient tracks the sweep closely
+    // (exact at the endpoints, ~7 % off mid-arc at most).
+    auto strokeArc = [&](float cx, float cy, float r, float a0, float a1, float s0, float s1) {
+        if (r <= 0.0f)
+            return;
+        const float extA = OVERLAP / r;
+        const float arc   = a1 - a0;
+        const int   steps = (int)ceilf(fabsf(arc) / (NVG_PI / 4.0f));
+        for (int i = 0; i < steps; i++)
+        {
+            const float b0 = a0 + arc * i / steps;
+            const float b1 = a0 + arc * (i + 1) / steps;
+            const float x0 = cx + r * cosf(b0), y0 = cy + r * sinf(b0);
+            const float x1 = cx + r * cosf(b1), y1 = cy + r * sinf(b1);
+            nvgBeginPath(vg);
+            nvgArc(vg, cx, cy, r, b0 - extA, b1 + extA, NVG_CW);
+            nvgStrokePaint(vg, nvgLinearGradient(vg, x0, y0, x1, y1,
+                s2WheelColorAt(wheel, s0 + (s1 - s0) * i / steps, alpha),
+                s2WheelColorAt(wheel, s0 + (s1 - s0) * (i + 1) / steps, alpha)));
+            nvgStroke(vg);
+        }
+    };
+
+    if (spanW <= 0.5f && spanH <= 0.5f)
+    {
+        // Circle (round buttons): one continuous sweep around the ring,
+        // s = 0 at the upper-left diagonal (phi = 225 deg, the rect
+        // convention's phase), clockwise.
+        const float ccx = x + width / 2.0f, ccy = y + height / 2.0f;
+        strokeArc(ccx, ccy, rr, 3.0f * NVG_PI / 4.0f, 3.0f * NVG_PI / 4.0f + 2.0f * NVG_PI, 0.0f, 1.0f);
+    }
+    else if (spanW <= 0.5f)
+    {
+        // Vertical pill: the side bars carry the sweep on their share, the
+        // round caps sweep continuously between the seams.
+        const float ccx = (clx + crx) / 2.0f;
+        strokeArc(ccx, cty, rr, NVG_PI, 2.0f * NVG_PI, 0.00f, 0.25f); // top cap
+        strokeLine(0.25f, 0.50f, cr, cty, cr, cby);                   // right: top -> bottom
+        strokeArc(ccx, cby, rr, 0.0f, NVG_PI, 0.50f, 0.75f);          // bottom cap
+        strokeLine(0.75f, 1.00f, cl, cby, cl, cty);                   // left:  bottom -> top
+    }
+    else if (spanH <= 0.5f)
+    {
+        // Horizontal pill.
+        const float ccy = (cty + cby) / 2.0f;
+        strokeLine(0.00f, 0.25f, clx, ct, crx, ct);                   // top:    left  -> right
+        strokeArc(crx, ccy, rr, -NVG_PI / 2.0f, NVG_PI / 2.0f, 0.25f, 0.50f);       // right cap
+        strokeLine(0.50f, 0.75f, crx, cb, clx, cb);                   // bottom: right -> left
+        strokeArc(clx, ccy, rr, NVG_PI / 2.0f, 3.0f * NVG_PI / 2.0f, 0.75f, 1.00f); // left cap
+    }
+    else
+    {
+        // Rectangle: each side carries an equal quarter of the sweep (top
+        // left->right, right top->bottom, bottom right->left, left
+        // bottom->top) with a breakpoint wherever a rotated wheel anchor
+        // lands inside it (at most one, spacing 0.25 == the side's sweep),
+        // and the corners are flat-coloured by the adjacent side's
+        // endpoint, so every pixel column of a side shares one colour —
+        // matching the per-side projection of the system UI reference.
+        const struct
+        {
+            float a;
+            float x0, y0, x1, y1;
+        } sides[4] = {
+            { 0.00f, clx, ct, crx, ct },  // top:    left  -> right
+            { 0.25f, cr,  cty, cr, cby }, // right:  top   -> bottom
+            { 0.50f, crx, cb, clx, cb },  // bottom: right -> left
+            { 0.75f, cl,  cby, cl, cty }, // left:   bottom -> top
+        };
+
+        for (const auto& side : sides)
+        {
+            const float span = 0.25f;
+            const float b    = side.a + span;
+            float split      = -1.0f;
+            for (int k = 0; k < 4; k++)
+            {
+                const float p = fmodf(wheel.rotFrac + k * 0.25f, 1.0f);
+                if (p > side.a && p < b)
+                {
+                    split = p;
+                    break;
+                }
+            }
+
+            auto at = [&](float s, float& px, float& py) {
+                const float t = (s - side.a) / span;
+                px = side.x0 + (side.x1 - side.x0) * t;
+                py = side.y0 + (side.y1 - side.y0) * t;
+            };
+
+            float x0, y0, x1, y1, xm, ym;
+            if (split > 0.0f)
+            {
+                at(side.a, x0, y0);
+                at(split, xm, ym);
+                at(b, x1, y1);
+                strokeLine(side.a, split, x0, y0, xm, ym);
+                strokeLine(split, b, xm, ym, x1, y1);
+            }
+            else
+            {
+                at(side.a, x0, y0);
+                at(b, x1, y1);
+                strokeLine(side.a, b, x0, y0, x1, y1);
+            }
+        }
+
+        // Corner arcs, flat-coloured by the adjacent side's endpoint.
+        if (rr > 0.0f)
+        {
+            const struct
+            {
+                float cx, cy, a0, a1, s;
+            } corners[4] = {
+                { clx, cty, NVG_PI, 1.5f * NVG_PI, 0.00f }, // top-left
+                { crx, cty, 1.5f * NVG_PI, 2.0f * NVG_PI, 0.25f }, // top-right
+                { crx, cby, 0.0f, 0.5f * NVG_PI, 0.50f }, // bottom-right
+                { clx, cby, 0.5f * NVG_PI, NVG_PI, 0.75f }, // bottom-left
+            };
+            for (const auto& c : corners)
+            {
+                nvgBeginPath(vg);
+                nvgArc(vg, c.cx, c.cy, rr, c.a0 - OVERLAP / rr, c.a1 + OVERLAP / rr, NVG_CW);
+                nvgStrokeColor(vg, s2WheelColorAt(wheel, c.s, alpha));
+                nvgStroke(vg);
+            }
+        }
+    }
+
+    nvgRestore(vg);
+}
+#endif // __SWITCH2__
+
 namespace brls
 {
 
@@ -249,10 +495,10 @@ void View::playClickAnimation(bool reverse, bool animateBack, bool force)
 
     this->clickAlpha.reset(reverse ? 1.0f : 0.0f);
 
-    this->clickAlpha.addStep(
-        reverse ? 0.0f : 1.0f,
-        style["brls/animations/highlight"],
-        reverse ? EasingFunction::quadraticOut : EasingFunction::quadraticIn);
+    if (reverse)
+        this->clickAlpha.addStep(0.0f, style["brls/animations/highlight"], tweeny::easing::quadraticOut);
+    else
+        this->clickAlpha.addStep(1.0f, style["brls/animations/highlight"], tweeny::easing::quadraticIn);
 
     this->clickAlpha.setEndCallback([this, reverse, animateBack](bool finished) {
         if (reverse || !animateBack || Application::getInputType() == InputType::TOUCH)
@@ -482,7 +728,7 @@ void View::collapse(bool animated)
 
         this->collapseState.reset();
 
-        this->collapseState.addStep(0.0f, style["brls/animations/collapse"], EasingFunction::quadraticOut);
+        this->collapseState.addStep(0.0f, style["brls/animations/collapse"], tweeny::easing::quadraticOut);
 
         this->collapseState.setTickCallback([this] {
             if (this->hasParent())
@@ -510,7 +756,7 @@ void View::expand(bool animated)
 
         this->collapseState.reset();
 
-        this->collapseState.addStep(1.0f, style["brls/animations/collapse"], EasingFunction::quadraticOut);
+        this->collapseState.addStep(1.0f, style["brls/animations/collapse"], tweeny::easing::quadraticOut);
 
         this->collapseState.setTickCallback([this] {
             if (this->hasParent())
@@ -589,7 +835,11 @@ void View::drawHighlight(NVGcontext* vg, Theme theme, float alpha, Style style, 
     }
     else
     {
-#ifdef SIMPLE_HIGHLIGHT
+#if defined(__SWITCH2__)
+        // Switch 2: rotating four-colour wheel border (system UI style),
+        // replacing the Switch 1 pulsing border and its glow entirely.
+        s2DrawWheelBorder(vg, x, y, width, height, strokeWidth, cornerRadius, alpha);
+#elif defined(SIMPLE_HIGHLIGHT)
         // Border
         nvgBeginPath(vg);
         nvgStrokeColor(vg, a(theme["brls/highlight/color1"]));
@@ -1297,7 +1547,7 @@ void View::onFocusGained()
     Style style = Application::getStyle();
 
     this->highlightAlpha.reset();
-    this->highlightAlpha.addStep(1.0f, style["brls/animations/highlight"], EasingFunction::quadraticOut);
+    this->highlightAlpha.addStep(1.0f, style["brls/animations/highlight"], tweeny::easing::quadraticOut);
     this->highlightAlpha.start();
 
     this->focusEvent.fire(this);
@@ -1323,7 +1573,7 @@ void View::onFocusLost()
     Style style = Application::getStyle();
 
     this->highlightAlpha.reset();
-    this->highlightAlpha.addStep(0.0f, style["brls/animations/highlight"], EasingFunction::quadraticOut);
+    this->highlightAlpha.addStep(0.0f, style["brls/animations/highlight"], tweeny::easing::quadraticOut);
     this->highlightAlpha.start();
 
     this->focusLostEvent.fire(this);
@@ -1371,7 +1621,7 @@ void View::show(std::function<void(void)> cb, bool animate, float animationDurat
     {
         this->alpha.reset(0.0f);
 
-        this->alpha.addStep(1.0f, animationDuration, EasingFunction::quadraticOut);
+        this->alpha.addStep(1.0f, animationDuration, tweeny::easing::quadraticOut);
 
         this->alpha.setEndCallback([this, cb](bool finished) {
             this->fadeIn = false;
@@ -1412,7 +1662,7 @@ void View::hide(std::function<void(void)> cb, bool animated, float animationDura
     {
         this->alpha.reset(1.0f);
 
-        this->alpha.addStep(0.0f, animationDuration, EasingFunction::quadraticOut);
+        this->alpha.addStep(0.0f, animationDuration, tweeny::easing::quadraticOut);
 
         this->alpha.setEndCallback([cb](bool finished) {
             if (finished) cb();

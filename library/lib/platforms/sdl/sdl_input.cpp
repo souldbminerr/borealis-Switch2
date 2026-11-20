@@ -375,11 +375,16 @@ static int sdlEventWatcher(void* data, SDL_Event* event)
     }
     else if (event->type == SDL_CONTROLLERDEVICEREMOVED)
     {
-        Logger::info("Controller disconnected: {}", event->cdevice.which);
-        SDL_JoystickID jid = SDL_JoystickGetDeviceInstanceID(event->cdevice.which);
-        controllers.erase(std::remove_if(controllers.begin(), controllers.end(), [jid](auto x) {
+        // For SDL_CONTROLLERDEVICEREMOVED, event->cdevice.which is already the instance ID
+        SDL_JoystickID jid = event->cdevice.which;
+        Logger::info("Controller disconnected: {}", jid);
+        auto it = std::find_if(controllers.begin(), controllers.end(), [jid](auto x) {
             return x.first == jid;
-        }), controllers.end());
+        });
+        if (it != controllers.end()) {
+            SDL_GameControllerClose(it->second);
+            controllers.erase(it);
+        }
     }
     else if (event->type == SDL_MOUSEBUTTONDOWN)
     {
@@ -509,7 +514,7 @@ void SDLInputManager::updateUnifiedControllerState(ControllerState* state)
 
 void SDLInputManager::updateControllerState(ControllerState* state, int controller)
 {
-    if (controllers.size() <= controller) return;
+    if ((int)controllers.size() <= controller) return;
 
     SDL_GameController* c = controllers[controller].second;
 
@@ -663,6 +668,8 @@ void SDLInputManager::updateKeyboardState(SDL_KeyboardEvent event)
     state.mods |= event.keysym.mod & KMOD_CTRL ? BRLS_KBD_MODIFIER_CTRL : 0;
     state.mods |= event.keysym.mod & KMOD_ALT ? BRLS_KBD_MODIFIER_ALT : 0;
     state.mods |= event.keysym.mod & KMOD_GUI ? BRLS_KBD_MODIFIER_META : 0;
+
+    Logger::debug("Scan: {} / Code: {} / Action: {}", (int)event.keysym.scancode, (int)state.key, event.type);
 
     self->getKeyboardKeyStateChanged()->fire(state);
     Application::setActiveEvent(true);

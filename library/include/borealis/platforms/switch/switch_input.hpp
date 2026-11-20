@@ -54,6 +54,16 @@ class SwitchInputManager : public InputManager
 
     void drawCursor(NVGcontext* vg) override;
 
+    void setPadMouseEnabled(bool enabled) override;
+
+    void setPadMouseBindings(std::vector<ControllerButton> buttons) override;
+
+    bool isPadMouseBinding(ControllerButton button) override;
+
+    bool isPadMouseMode() override;
+
+    std::string getSensorDebugInfo() override;
+
     void sendRumbleRaw(float lowFreq, float highFreq, float lowAmp, float highAmp);
 
     void clearVibration(int controller);
@@ -73,6 +83,59 @@ class SwitchInputManager : public InputManager
     u32 padsStyleSet[GAMEPADS_MAX];
     bool pointerLocked = false;
     HidMouseState currentMouseState;
+#ifdef __SWITCH2__
+    // Joy-Con mouse through libounce's native PadPointer API: per-device
+    // handles that never touch hidSetMergedNmouseSourceTypes, so the
+    // Joy-Con sticks stay with the pads while no pointer is in use.
+    // Opt-in through setPadMouseEnabled(): only then is the pointer
+    // service initialized.
+    static constexpr int PAD_MOUSE_AREA_W         = 1920;
+    static constexpr int PAD_MOUSE_AREA_H         = 1080;
+    // Net pointer movement (pointer-area px) that engages mouse mode, so
+    // sensor jitter at rest never wakes the cursor.
+    static constexpr int PAD_MOUSE_MOVE_THRESHOLD = 64;
+    // Mouse mode ends (cursor hides) after this long without pointer use.
+    static constexpr Time PAD_MOUSE_IDLE_HIDE_USEC = 3000000; // 3 s
+    // Mouse grip orientation: the Joy-Con stands on its side rail, so
+    // gravity runs along the face-plane horizontal axis — +1.0 on the left
+    // Joy-Con, -1.0 on the right; valid within 0.15 of each controller's
+    // value, disengaging immediately outside.
+    static constexpr float PAD_MOUSE_GRIP_MIN_ACCEL = 0.85f;
+    static constexpr float PAD_MOUSE_GRIP_MAX_ACCEL = 1.15f;
+    // Cursor: semi-transparent white dot, brighter while clicking.
+    static constexpr float PAD_MOUSE_DOT_RADIUS         = 9.0f;
+    static constexpr uint8_t PAD_MOUSE_DOT_ALPHA        = 128; // 50 %
+    static constexpr uint8_t PAD_MOUSE_DOT_ALPHA_CLICK  = 191; // 75 %
+    // Pad buttons that double as pointer clicks while mouse mode is on.
+    static constexpr uint64_t PAD_MOUSE_CLICK_MASK =
+        (uint64_t)HidNpadButton_L | (uint64_t)HidNpadButton_R | (uint64_t)HidNpadButton_ZL | (uint64_t)HidNpadButton_ZR;
+    bool padMouseEnabled  = false;
+    bool padPointerReady  = false;
+    bool padMouseHasAnchor = false;
+    PadPointer padPointer{};
+    bool padMouseMode = false;        // cursor visible
+    Time padMouseLastActive = 0;
+    int padMouseAnchorX = 0, padMouseAnchorY = 0;
+    // Buttons the app bound to mouse-mode-only actions (see
+    // setPadMouseBindings): they do not end mouse mode when pressed.
+    bool padMouseBindings[_BUTTON_MAX] = {};
+
+    // Ends mouse mode and hands input back to the pads: the input type
+    // would otherwise stay TOUCH/MOUSE from the last mouse activity,
+    // leaving the sticks moving focus without the gamepad re-centering.
+    void exitPadMouseMode();
+
+    // Whether the pointer's controller is in the mouse-grip orientation
+    // (standing on its side rail; see PAD_MOUSE_GRIP_MIN_ACCEL).
+    bool padMouseGripOk();
+
+    // Six-axis read with the stale-default retry (see Status-Monitor-Deux
+    // workaround).
+    HidSixAxisSensorState readSixAxis(HidSixAxisSensorHandle handle);
+
+    bool padMouseLeftDown = false, padMouseRightDown = false;
+    bool padMouseLeftHeld = false, padMouseRightHeld = false;
+#endif
     HidSixAxisSensorHandle m_six_axis_sensor_handle[4]; // All for player 1, player 2 not supported
 
     std::vector<bool> m_hid_keyboard_state;
@@ -81,6 +144,9 @@ class SwitchInputManager : public InputManager
 
     void initCursor(NVGcontext* vg);
     void handleMouse();
+#ifdef __SWITCH2__
+    void handlePadPointer();
+#endif
     void handleKeyboard();
     void handleControllerSensors();
     void upToDateMouseState();

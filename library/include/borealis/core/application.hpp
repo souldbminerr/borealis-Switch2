@@ -183,6 +183,7 @@ class Application
     static void crash(std::string text);
 
     static void quit();
+    static void clear();
 
     /**
      * Blocks any and all user inputs
@@ -314,6 +315,13 @@ class Application
         return inputType;
     }
 
+    /**
+     * Sets the current input type (e.g. handing control back to the pads
+     * when a platform's pad mouse mode ends). Returns true if the type
+     * changed.
+     */
+    static bool setInputType(InputType type);
+
     inline static void enableDebuggingView(bool enable)
     {
         debuggingViewEnabled = enable;
@@ -380,9 +388,6 @@ class Application
     inline static MouseState currentMouseState;
     inline static NotificationManager* notificationManager;
 
-    // Return true if input type was changed
-    static bool setInputType(InputType type);
-
     inline static InputType inputType = InputType::GAMEPAD;
     inline static std::vector<BrlsKeyState> watchedKeys;
     inline static std::vector<BrlsKeyState> oldWatchedKeys;
@@ -431,7 +436,6 @@ class Application
     static void navigate(FocusDirection direction, bool repeating);
 
     static void frame();
-    static void clear();
     static void exit();
 
     /**

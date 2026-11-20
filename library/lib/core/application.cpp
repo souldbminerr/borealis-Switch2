@@ -345,6 +345,19 @@ void Application::processInput()
     }
     currentTouchState = touchState;
 
+    // The cached mouse view can belong to a popped activity or tab (dialogs,
+    // dropdowns, navigation). Revalidate it against the current content
+    // tree before use, or every click after a navigation would dispatch to
+    // a detached view instead of what is actually under the cursor.
+    if (currentMouseState.view)
+    {
+        View* root = currentMouseState.view;
+        while (root && root->getParent()) root = root->getParent();
+        View* content = activitiesStack.empty() ? nullptr : activitiesStack.back()->getContentView();
+        if (root != content)
+            currentMouseState.view = nullptr;
+    }
+
     MouseState mouseState = InputManager::computeMouseState(rawMouse, currentMouseState);
 
     if (mouseState.offset.x != 0 || mouseState.offset.y != 0 || mouseState.scroll.x != 0 || mouseState.scroll.y != 0 || mouseState.leftButton != TouchPhase::NONE || mouseState.middleButton != TouchPhase::NONE || mouseState.rightButton != TouchPhase::NONE)
@@ -653,8 +666,8 @@ bool Application::getAutomaticDeactivation()
 
 bool Application::hasActiveEvent()
 {
-#ifdef __SWITCH__
-    // Switch does not support waiting for events
+#if defined(__SWITCH__) || defined(__PS4__)
+    // Switch and PS4 do not support waiting for events - always render
     return true;
 #else
     if (!Application::deactivatedBehavior || activeEvent || Application::frameStartTime - lastActiveTime < Application::deactivatedTime)
@@ -696,8 +709,12 @@ double Application::getDeactivatedFrameTime()
 
 bool Application::handleAction(const ActionType type, const int button, const bool repeating)
 {
-    // Dismiss if input type was changed
-    if (type == ACTION_GAMEPAD && button == BUTTON_A && setInputType(InputType::GAMEPAD))
+    // Dismiss if input type was changed. Buttons currently bound to pad
+    // mouse mode are mouse input: their actions run as-is, neither
+    // dismissed to switch the input type nor flipping it back afterwards.
+    if (type == ACTION_GAMEPAD && button == BUTTON_A
+        && !Application::platform->getInputManager()->isPadMouseBinding((ControllerButton)button)
+        && setInputType(InputType::GAMEPAD))
         return false;
 
     if (Application::activitiesStack.empty())
@@ -726,7 +743,8 @@ bool Application::handleAction(const ActionType type, const int button, const bo
             {
                 if (action->getActionListener()(hintParent))
                 {
-                    setInputType(InputType::GAMEPAD);
+                    if (!Application::platform->getInputManager()->isPadMouseBinding((ControllerButton)button))
+                        setInputType(InputType::GAMEPAD);
                     if (type == ACTION_GAMEPAD && button == BUTTON_A)
                         hintParent->playClickAnimation();
 
@@ -1028,6 +1046,7 @@ void Application::clear()
         delete activity;
     }
 
+    Application::focusStack.clear();
     Application::activitiesStack.clear();
 }
 

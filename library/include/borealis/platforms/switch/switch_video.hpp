@@ -68,6 +68,12 @@ class SwitchVideoContext : public VideoContext
 
     void queueFlush();
 
+    /* borealis addition: zero-copy video upload. CPU address of a
+     * texture's persistent upload backing (NVG_IMAGE_STREAMING images,
+     * dual-mapped CPU + GPU memory) for a client (mpv SW render) to
+     * render into; nullptr when unavailable. */
+    unsigned char* getImageBacking(int image);
+
   private:
     _LibNXEvent defaultDisplayResolutionChangeEvent;
     bool displayResolutionChangeEventReady = true;

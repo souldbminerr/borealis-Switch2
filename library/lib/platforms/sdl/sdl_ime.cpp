@@ -85,8 +85,10 @@ namespace brls
         std::string headerText,
         std::string subText,
         size_t maxStringLength,
-        std::string initialText) {
+        std::string initialText,
+        bool isPassword) {
         EditTextDialog* dialog = new EditTextDialog();
+        dialog->setPasswordStyle(isPassword);
         this->inputBuffer = initialText;
 #ifdef __PSV__
         vita_ime_init_text = reinterpret_cast<uint8_t *>(const_cast<char *>(this->inputBuffer.c_str()));
@@ -114,11 +116,11 @@ namespace brls
             dialog->setCursor(cursor);
         };
         auto updateTextAndCursor = [this, updateText, updateTextCursor, maxStringLength](std::string text) {
-            int prev_n = utf8_len(this->inputBuffer);
+            size_t prev_n = utf8_len(this->inputBuffer);
             if (prev_n >= maxStringLength) {
                 return;
             }
-            int n = utf8_len(text);
+            size_t n = utf8_len(text);
             if (prev_n + n > maxStringLength) {
                 n = maxStringLength - prev_n;
                 int end = utf8_find_next(text, 0, n);
@@ -177,7 +179,7 @@ namespace brls
             }
         });
         
-        dialog->registerAction(
+        dialog->getApplet()->registerAction(
             "hints/left"_i18n, BUTTON_LEFT, [this, updateTextCursor](...){
                 if (this->isEditing) return true;
                 if (this->cursor == (int)CursorPosition::END) {
@@ -191,7 +193,7 @@ namespace brls
                 return true;
             }, true, true
         );
-        dialog->registerAction(
+        dialog->getApplet()->registerAction(
             "hints/right"_i18n, BUTTON_RIGHT, [this, updateTextCursor](...){
                 if (this->isEditing) return true;
                 if (this->cursor >= (int)CursorPosition::START) {
@@ -250,6 +252,15 @@ namespace brls
         this->openInputDialog([f](const std::string& text)
             { f(text); },
             headerText, subText, maxStringLength, initialText);
+        return true;
+    }
+
+    bool SDLImeManager::openForPassword(std::function<void(std::string)> f, std::string headerText,
+        std::string subText, int maxStringLength, std::string initialText)
+    {
+        this->openInputDialog([f](const std::string& text)
+            {if(!text.empty()) f(text); },
+            headerText, subText, maxStringLength, initialText, true);
         return true;
     }
 

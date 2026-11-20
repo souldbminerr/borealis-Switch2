@@ -236,6 +236,13 @@ void SwitchVideoContext::setSwapInterval(int interval)
     swapchain.setSwapInterval(interval);
 }
 
+unsigned char* SwitchVideoContext::getImageBacking(int image)
+{
+    if (this->renderer.has_value())
+        return this->renderer->GetImageBacking(image);
+    return nullptr;
+}
+
 void SwitchVideoContext::destroyFramebufferResources()
 {
     // Return early if we have nothing to destroy

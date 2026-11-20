@@ -27,7 +27,9 @@ TapGestureRecognizer::TapGestureRecognizer(View* view, TapGestureConfig config)
             Application::giveFocus(view);
         for (auto& action : view->getActions())
         {
-            if (action->getType() != ACTION_GAMEPAD || action->getButton() != BUTTON_A)
+            // Left tap activates the primary action (A), right tap the
+            // secondary one (X), same as mouse right click.
+            if (action->getType() != ACTION_GAMEPAD || action->getButton() != status.button)
                 continue;
 
             if (action->isAvailable())
@@ -94,8 +96,27 @@ GestureState TapGestureRecognizer::recognitionLoop(TouchState touch, MouseState 
 
     if (phase == TouchPhase::NONE)
     {
+        // Right mouse button is the secondary tap (same as the X button).
         position = mouse.position;
-        phase    = mouse.leftButton;
+        if (mouse.leftButton != TouchPhase::NONE)
+        {
+            phase           = mouse.leftButton;
+            this->tapButton = BUTTON_A;
+        }
+        else if (mouse.rightButton != TouchPhase::NONE)
+        {
+            phase           = mouse.rightButton;
+            this->tapButton = BUTTON_X;
+        }
+        else
+        {
+            phase = TouchPhase::NONE;
+        }
+    }
+    else
+    {
+        // Touch taps always activate the primary (A) button.
+        this->tapButton = BUTTON_A;
     }
 
     if (!enabled || phase == TouchPhase::NONE)
@@ -149,6 +170,7 @@ TapGestureStatus TapGestureRecognizer::getCurrentStatus()
     return TapGestureStatus {
         .state    = this->state,
         .position = this->position,
+        .button   = this->tapButton,
     };
 }
 

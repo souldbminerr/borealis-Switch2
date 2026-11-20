@@ -58,6 +58,11 @@ namespace nvg {
 
     Texture::~Texture() {
         m_image_mem.destroy();
+        /* borealis addition: release the zero-copy upload backing. */
+        if (m_upload_ptr) {
+            m_upload_mem.destroy();
+            m_upload_ptr = nullptr;
+        }
     }
 
     void Texture::Initialize(CMemPool &image_pool, CMemPool &scratch_pool, dk::Device device, dk::Queue queue, int type, int w, int h, int image_flags, const u8 *data) {
@@ -67,6 +72,20 @@ namespace nvg {
             .type = type,
             .flags = image_flags,
         };
+
+        /* borealis addition: NVG_IMAGE_STREAMING gives the texture a
+         * persistent backing in dual-mapped (CPU + GPU) pool memory, so
+         * a client can render into it directly and the GPU can copy from
+         * it without a staging buffer. */
+        if (image_flags & NVG_IMAGE_STREAMING) {
+            const size_t backingSize = type == NVG_TEXTURE_RGBA ? (size_t)w * h * 4 : (size_t)w * h;
+            m_upload_mem = scratch_pool.allocate((uint32_t)backingSize, DK_IMAGE_LINEAR_STRIDE_ALIGNMENT);
+            m_upload_ptr = static_cast<u8*>(m_upload_mem.getCpuAddr());
+            if (data != nullptr) {
+                memcpy(m_upload_ptr, data, backingSize);
+                data = m_upload_ptr;
+            }
+        }
 
         /* Create an image layout. */
         dk::ImageLayout layout;
@@ -123,6 +142,13 @@ namespace nvg {
         dk::UniqueCmdBuf init_cmd_buf = dk::CmdBufMaker{m_device}.create();
         CMemPool::Handle init_cmd_mem = m_data_mem_pool.allocate(DK_MEMBLOCK_ALIGNMENT);
         init_cmd_buf.addMemory(init_cmd_mem.getMemBlock(), init_cmd_mem.getOffset(), init_cmd_mem.getSize());
+
+        /* borealis addition: zero-copy upload ring (command memory is
+         * pooled; see UpdateTexture for the recycling protocol). */
+        m_upload_cmd = dk::CmdBufMaker{m_device}.create();
+        for (int i = 0; i < UploadRingSize; i++) {
+            m_upload_cmdmem[i] = m_data_mem_pool.allocate(DK_MEMBLOCK_ALIGNMENT);
+        }
 
         for (u8 i = 0; i < SamplerType_Total; i++) {
             const DkFilter filter = (i & SamplerType_Nearest) ? DkFilter_Nearest : DkFilter_Linear;
@@ -484,6 +510,37 @@ namespace nvg {
         }
 
         const DKNVGtextureDescriptor &tex_desc = texture->GetDescriptor();
+
+        /* borealis addition: zero-copy upload. The client rendered
+         * directly into this texture's persistent backing (see
+         * NVG_IMAGE_STREAMING): copy GPU-side from the backing's GPU
+         * address. m_queue is the same in-order queue the frame is
+         * rendered on, so this copy completes before the draw commands
+         * submitted later this frame sample the image, and the backing
+         * is permanent, so there is no staging buffer. Nothing may be
+         * freed while the GPU may still be executing, so the command
+         * memory is pooled: each ring slot is waited on (its fence is
+         * many frames old) before reuse, which is instant, and no
+         * waitIdle is needed. */
+        if (y == 0 && texture->GetUploadPtr() != nullptr && data == texture->GetUploadPtr()) {
+            const int ring = m_upload_ring;
+            m_upload_ring = (m_upload_ring + 1) % UploadRingSize;
+            if (m_upload_fence_used[ring]) {
+                m_queue.waitFence(m_upload_fence[ring]);
+            }
+            m_upload_fence_used[ring] = true;
+
+            m_upload_cmd.clear();
+            m_upload_cmd.addMemory(m_upload_cmdmem[ring].getMemBlock(), m_upload_cmdmem[ring].getOffset(), m_upload_cmdmem[ring].getSize());
+
+            dk::ImageView imageView{texture->GetImage()};
+            m_upload_cmd.copyBufferToImage({ texture->GetUploadGpuAddr() }, imageView, { 0, 0, 0, (uint32_t)tex_desc.width, (uint32_t)tex_desc.height, 1 });
+            m_upload_cmd.signalFence(m_upload_fence[ring]);
+
+            m_queue.submitCommands(m_upload_cmd.finishList());
+            return 1;
+        }
+
         if (tex_desc.type == NVG_TEXTURE_RGBA) {
             data += y * tex_desc.width*4;
         } else {
@@ -494,6 +551,14 @@ namespace nvg {
 
         UpdateImage(texture->GetImage(), m_data_mem_pool, m_device, m_queue, tex_desc.type, x, y, w, h, data);
         return 1;
+    }
+
+    unsigned char* DkRenderer::GetImageBacking(int image) {
+        const std::shared_ptr<Texture> texture = this->FindTexture(image);
+        if (texture == nullptr) {
+            return nullptr;
+        }
+        return texture->GetUploadPtr();
     }
 
     int DkRenderer::GetTextureSize(const DKNVGcontext &ctx, int image, int *w, int *h) {

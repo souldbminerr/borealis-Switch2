@@ -23,6 +23,7 @@
 #include <borealis/core/geometry.hpp>
 #include <borealis/core/time.hpp>
 #include <vector>
+#include <string>
 
 #define GAMEPADS_MAX 5
 
@@ -344,6 +345,45 @@ class InputManager
     virtual void drawCursor(NVGcontext* vg) {};
 
     virtual void setPointerLock(bool lock) {};
+
+    /**
+     * Enable or disable the platform's pad-as-mouse feature (Switch 2
+     * Joy-Con mouse). While enabled, a Joy-Con laid on a surface drives
+     * the pointer; while disabled the pads keep every button and stick.
+     * No-op on platforms without such a feature.
+     */
+    virtual void setPadMouseEnabled(bool enabled) { (void)enabled; };
+
+    /**
+     * Buttons the app binds to mouse-mode-only actions (e.g. the video
+     * player's seek keys). While the platform's pad mouse mode is active
+     * these do not end it: they are mouse-mode input, not plain gamepad
+     * input. Defaults to none.
+     */
+    virtual void setPadMouseBindings(std::vector<ControllerButton> buttons) { (void)buttons; };
+
+    /**
+     * Whether the given button is currently bound to a mouse-mode-only
+     * action (see setPadMouseBindings) and the pad mouse mode is active.
+     * Core input handling treats such buttons as mouse input: their
+     * actions run without dismissing or switching the input type.
+     * Defaults to false.
+     */
+    virtual bool isPadMouseBinding(ControllerButton button) { (void)button; return false; };
+
+    /**
+     * Debug text describing the platform's motion-sensor state (e.g. the
+     * Joy-Cons' accelerometer for the pad mouse grip gate), or empty when
+     * unavailable.
+     */
+    virtual std::string getSensorDebugInfo() { return ""; };
+
+    /**
+     * Whether the platform's pad-as-mouse is currently engaged (pointer
+     * active, cursor visible). Apps can bind alternate actions for that
+     * state. Defaults to false.
+     */
+    virtual bool isPadMouseMode() { return false; };
 
     inline Event<Point>* getMouseCusorOffsetChanged()
     {

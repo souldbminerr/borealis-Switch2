@@ -50,10 +50,18 @@ class BooleanCell : public DetailCell
     float baseDetailTextSize;
 
     Animatable scale = 1;
+#ifdef __SWITCH2__
+    // Eased slide parameter of the Switch 2 pill toggle (0 = off, 1 = on).
+    Animatable switchP = 0;
+#endif
     Event<bool> event;
 
     void updateUI();
     void scaleTick();
+
+#ifdef __SWITCH2__
+    void draw(NVGcontext* vg, float x, float y, float width, float height, Style style, FrameContext* ctx) override;
+#endif
 };
 
 } // namespace brls

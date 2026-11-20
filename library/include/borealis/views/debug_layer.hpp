@@ -25,6 +25,15 @@ class DebugLayer : public Box
 {
   public:
     DebugLayer();
+
+    void frame(FrameContext* ctx) override;
+
+  private:
+#ifdef __SWITCH2__
+    // Sensor HUD (bottom-left): the Joy-Cons' accelerometer for the pad
+    // mouse grip gate.
+    Label* sensorLabel = nullptr;
+#endif
 };
 
 } // namespace brls

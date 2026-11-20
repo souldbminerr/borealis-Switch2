@@ -17,6 +17,7 @@
 #include <yoga/YGNode.h>
 
 #include <borealis/core/application.hpp>
+#include <borealis/core/platform.hpp>
 #include <borealis/core/thread.hpp>
 #include <borealis/views/debug_layer.hpp>
 #include <borealis/views/label.hpp>
@@ -102,6 +103,32 @@ DebugLayer::DebugLayer()
 
             if (contentView->getChildren().size() > brls::Application::contentHeight / 10 - 1)
                 contentView->removeView(contentView->getChildren()[contentView->getChildren().size() - 1]); }); });
+
+#ifdef __SWITCH2__
+    // Sensor HUD, anchored bottom-left: the Joy-Cons' accelerometer for
+    // the pad mouse grip gate (angles within 15 deg of the side rail
+    // count as grip).
+    Box* sensorPanel = new Box(Axis::COLUMN);
+    sensorPanel->setPadding(5);
+    sensorPanel->setBackgroundColor(RGBA(0, 0, 0, 160));
+    YGNodeStyleSetPositionType(sensorPanel->getYGNode(), YGPositionTypeAbsolute);
+    YGNodeStyleSetPosition(sensorPanel->getYGNode(), YGEdgeLeft, 5);
+    YGNodeStyleSetPosition(sensorPanel->getYGNode(), YGEdgeBottom, 5);
+    this->sensorLabel = new Label();
+    this->sensorLabel->setFontSize(8);
+    this->sensorLabel->setTextColor(RGBA(200, 200, 200, 220));
+    sensorPanel->addView(this->sensorLabel);
+    this->addView(sensorPanel);
+#endif
+}
+
+void DebugLayer::frame(FrameContext* ctx)
+{
+    Box::frame(ctx);
+#ifdef __SWITCH2__
+    if (this->sensorLabel)
+        this->sensorLabel->setText(brls::Application::getPlatform()->getInputManager()->getSensorDebugInfo());
+#endif
 }
 
 } // namespace brls

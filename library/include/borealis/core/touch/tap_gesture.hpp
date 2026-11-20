@@ -42,6 +42,7 @@ struct TapGestureStatus
 {
     GestureState state; // Gesture state
     Point position; // Current position
+    ControllerButton button = BUTTON_A; // Button this tap activates (left = A, right = X)
 };
 typedef Event<TapGestureStatus, Sound*> TapGestureEvent;
 
@@ -80,6 +81,7 @@ class TapGestureRecognizer : public GestureRecognizer
     TapGestureEvent tapEvent;
     Point position{};
     GestureState lastState{};
+    ControllerButton tapButton = BUTTON_A;
     bool forceRecognision{};
 };
 

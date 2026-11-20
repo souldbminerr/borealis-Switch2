@@ -126,6 +126,14 @@ namespace nvg {
             dk::ImageDescriptor m_image_descriptor;
             CMemPool::Handle m_image_mem;
             DKNVGtextureDescriptor m_texture_descriptor;
+            /* borealis addition: persistent CPU-writable backing for
+             * NVG_IMAGE_STREAMING images, allocated from the dual-mapped
+             * (CPU + GPU) data pool. A client renders directly into
+             * GetUploadPtr() and passes that same pointer to
+             * nvgUpdateImage: the update then copies GPU-side with no
+             * staging buffer and no GPU sync. */
+            CMemPool::Handle m_upload_mem;
+            u8* m_upload_ptr = nullptr;
         public:
             Texture(int id);
             ~Texture();
@@ -138,6 +146,10 @@ namespace nvg {
 
             dk::Image &GetImage();
             dk::ImageDescriptor &GetImageDescriptor();
+
+            /* borealis addition: zero-copy upload backing accessors. */
+            u8* GetUploadPtr() { return m_upload_ptr; }
+            DkGpuAddr GetUploadGpuAddr() { return m_upload_mem.getGpuAddr(); }
     };
 
     class DkRenderer {
@@ -172,6 +184,20 @@ namespace nvg {
             CMemPool::Handle m_view_uniform_buffer;
             CMemPool::Handle m_frag_uniform_buffer;
 
+            /* borealis addition: zero-copy upload synchronization. The
+             * direct-copy path (see UpdateTexture) submits without any
+             * waitIdle, so its command memory must never be freed while
+             * the GPU may still be executing it. Command memory is
+             * pooled in a small ring and recycled behind fences: before
+             * a slot is reused, its fence (signaled many frames ago) is
+             * waited on, which is instant in practice. */
+            static constexpr int UploadRingSize = 8;
+            dk::UniqueCmdBuf m_upload_cmd;
+            CMemPool::Handle m_upload_cmdmem[UploadRingSize];
+            dk::Fence m_upload_fence[UploadRingSize];
+            bool m_upload_fence_used[UploadRingSize] = {};
+            int m_upload_ring = 0;
+
             u32 m_next_texture_id = 1;
             std::vector<std::shared_ptr<Texture>> m_textures;
             CDescriptorSet<MaxImages> m_image_descriptor_set;
@@ -205,6 +231,12 @@ namespace nvg {
             int UpdateTexture(const DKNVGcontext &ctx, int id, int x, int y, int w, int h, const u8 *data);
             int GetTextureSize(const DKNVGcontext &ctx, int id, int *w, int *h);
             const DKNVGtextureDescriptor *GetTextureDescriptor(const DKNVGcontext &ctx, int id);
+
+            /* borealis addition: zero-copy video upload. Returns the CPU
+             * address of a texture's persistent upload backing for
+             * NVG_IMAGE_STREAMING images (dual-mapped CPU + GPU memory),
+             * or nullptr when the texture has none. */
+            unsigned char* GetImageBacking(int image);
 
             CDescriptorSet<4096U> *GetImageDescriptor() { return &m_image_descriptor_set; }
             int AllocateImageIndex();

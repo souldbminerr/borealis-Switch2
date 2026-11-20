@@ -13,6 +13,7 @@ option(PLATFORM_ANDROID "build for Android" OFF)
 option(PLATFORM_PSV "build for psv" OFF)
 option(PLATFORM_PS4 "build for ps4" OFF)
 option(PLATFORM_SWITCH "build for switch" OFF)
+option(PLATFORM_SWITCH2 "build for switch 2 (libounce)" OFF)
 
 # OpenGL options
 option(USE_EGL "Using EGL instead of native GL." OFF)
@@ -37,6 +38,8 @@ set(IOS_GUI_IDENTIFIER "" CACHE STRING "Package name.")
 
 # Nintendo Switch Only
 cmake_dependent_option(USE_DEKO3D "Using deko3d instead of OpenGL." OFF "PLATFORM_SWITCH" OFF)
+# Nintendo Switch 2 Only (drako3d is API-compatible with deko3d)
+cmake_dependent_option(USE_DRAKO3D "Using drako3d instead of OpenGL." OFF "PLATFORM_SWITCH2" OFF)
 
 option(USE_BOOST_FILESYSTEM "Whether to use the boost::filesystem instead of std::filesystem" OFF)
 
@@ -83,7 +86,7 @@ endif ()
 
 if (NOT DEFINED APP_PLATFORM_LINK_OPTION)
     set(APP_PLATFORM_LINK_OPTION)
-    if (PLATFORM_SWITCH OR PLATFORM_PSV)
+    if (PLATFORM_SWITCH OR PLATFORM_SWITCH2 OR PLATFORM_PSV)
         list(APPEND APP_PLATFORM_LINK_OPTION "-Wl,-Map,borealis.map")
     endif ()
 endif ()

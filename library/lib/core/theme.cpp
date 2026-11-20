@@ -31,6 +31,7 @@ static ThemeValues lightThemeValues = {
     { "brls/backdrop", nvgRGBA(0, 0, 0, 178) },
     { "brls/click_pulse", nvgRGBA(13, 182, 213, 38) }, // same as highlight color1 with different opacity
     { "brls/accent", nvgRGB(49, 79, 235) },
+    { "brls/dialog/background", nvgRGB(235, 235, 235) },
 
     // Highlight
     { "brls/highlight/background", nvgRGB(252, 255, 248) },
@@ -83,13 +84,14 @@ static ThemeValues lightThemeValues = {
 
 static ThemeValues darkThemeValues = {
     // Generic values
-    { "brls/clear", nvgRGB(45, 45, 45) },
-    { "brls/background", nvgRGB(45, 45, 45) },
+    { "brls/clear", nvgRGB(28, 28, 28) },
+    { "brls/background", nvgRGB(28, 28, 28) },
     { "brls/text", nvgRGB(255, 255, 255) },
     { "brls/text_disabled", nvgRGB(80, 80, 80) },
     { "brls/backdrop", nvgRGBA(0, 0, 0, 178) },
     { "brls/click_pulse", nvgRGBA(25, 138, 198, 38) }, // same as highlight color1 with different opacity
-    { "brls/accent", nvgRGB(0, 255, 204) },
+    { "brls/accent", nvgRGB(32, 203, 255) },
+    { "brls/dialog/background", nvgRGB(58, 58, 58) },
 
     // Highlight
     { "brls/highlight/background", nvgRGB(31, 34, 39) },
@@ -100,9 +102,9 @@ static ThemeValues darkThemeValues = {
     { "brls/applet_frame/separator", nvgRGB(255, 255, 255) },
 
     // Sidebar
-    { "brls/sidebar/background", nvgRGB(50, 50, 50) },
+    { "brls/sidebar/background", nvgRGB(60, 60, 60) },
     { "brls/sidebar/active_item", nvgRGB(0, 255, 204) },
-    { "brls/sidebar/separator", nvgRGB(81, 81, 81) },
+    { "brls/sidebar/separator", nvgRGB(108, 108, 108) },
 
     // Header
     { "brls/header/border", nvgRGB(78, 78, 78) },
@@ -127,7 +129,7 @@ static ThemeValues darkThemeValues = {
     { "brls/button/disabled_border_color", nvgRGB(255, 255, 255) },
 
     // List
-    { "brls/list/listItem_value_color", nvgRGB(88, 195, 169) },
+    { "brls/list/listItem_value_color", nvgRGB(32, 203, 255) },
 
     // Slider
     { "brls/slider/pointer_color", nvgRGB(80, 80, 80) },
