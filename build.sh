@@ -14,9 +14,15 @@ else
   echo "warning: $DEVKITPRO/switch2vars.sh not found; continuing with current env" >&2
 fi
 
-aarch64-none-elf-cmake -S . -B build_switch2 \
+aarch64-none-elf-cmake -S . -B build_switch2 -G Ninja \
   -DPLATFORM_SWITCH2=ON \
   -DUSE_DRAKO3D=ON \
   -DCMAKE_BUILD_TYPE=Release "$@"
 
-cmake --build build_switch2 -j8
+CORES="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+JOBS=$((CORES / 4))
+if [ "$JOBS" -lt 1 ]; then
+  JOBS=1
+fi
+
+cmake --build build_switch2 -j"$JOBS"

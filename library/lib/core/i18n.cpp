@@ -47,77 +47,102 @@ static void loadLocale(std::string locale, nlohmann::json* target)
 {
     if (locale.empty())
         return;
+
+    try
+    {
+        Logger::info("Loading locale: {}", locale);
 #ifdef USE_LIBROMFS
-    auto localePath = romfs::list("i18n/" + locale);
-    if (localePath.empty())
-    {
-        Logger::error("Cannot load locale {}: directory i18n/{} doesn't exist", locale, locale);
-        return;
-    }
-    for (auto& entry : localePath)
-    {
-        std::string path = entry.string();
-        std::string name = entry.filename().string();
-        if (!endsWith(name, ".json"))
-            continue;
+        auto localePath = romfs::list("i18n/" + locale);
+        if (localePath.empty())
+        {
+            Logger::error("Cannot load locale {}: directory i18n/{} doesn't exist", locale, locale);
+            return;
+        }
+        for (auto& entry : localePath)
+        {
+            std::string path = entry.string();
+            std::string name = entry.filename().string();
+            if (!endsWith(name, ".json"))
+                continue;
 
-        (*target)[name.substr(0, name.length() - 5)] = nlohmann::json::parse(romfs::get(path).string());
-    }
+            (*target)[name.substr(0, name.length() - 5)] = nlohmann::json::parse(romfs::get(path).string());
+        }
 #else
-    std::string localePath = BRLS_ASSET("i18n/" + locale);
+        std::string localePath = BRLS_ASSET("i18n/" + locale);
 
-    if (!fs::exists(localePath))
-    {
-        Logger::error("Cannot load locale {}: directory {} doesn't exist", locale, localePath);
-        return;
-    }
-    else if (!fs::is_directory(localePath))
-    {
-        Logger::error("Cannot load locale {}: {} isn't a directory", locale, localePath);
-        return;
-    }
-
-    // Iterate over all JSON files in the directory
-    for (const fs::directory_entry& entry : fs::directory_iterator(localePath))
-    {
-        if (fs::is_directory(entry))
-            continue;
-
-        std::string name = entry.path().filename().string();
-
-        if (!endsWith(name, ".json"))
-            continue;
-
-        std::string path = entry.path().string();
-
-        nlohmann::json strings;
-
-        std::ifstream jsonStream;
-        jsonStream.open(path);
-
-        try
+        if (!fs::exists(localePath))
         {
-            jsonStream >> strings;
+            Logger::error("Cannot load locale {}: directory {} doesn't exist", locale, localePath);
+            return;
         }
-        catch (const std::exception& e)
+        else if (!fs::is_directory(localePath))
         {
-            Logger::error("Error while loading \"{}\": {}", path, e.what());
+            Logger::error("Cannot load locale {}: {} isn't a directory", locale, localePath);
+            return;
         }
 
-        jsonStream.close();
+        // Iterate over all JSON files in the directory
+        for (const fs::directory_entry& entry : fs::directory_iterator(localePath))
+        {
+            if (fs::is_directory(entry))
+                continue;
 
-        (*target)[name.substr(0, name.length() - 5)] = strings;
-    }
+            std::string name = entry.path().filename().string();
+
+            if (!endsWith(name, ".json"))
+                continue;
+
+            std::string path = entry.path().string();
+
+            nlohmann::json strings;
+
+            std::ifstream jsonStream;
+            jsonStream.open(path);
+
+            try
+            {
+                jsonStream >> strings;
+            }
+            catch (const std::exception& e)
+            {
+                Logger::error("Error while loading \"{}\": {}", path, e.what());
+            }
+
+            jsonStream.close();
+
+            (*target)[name.substr(0, name.length() - 5)] = strings;
+        }
 #endif /* USE_LIBROMFS */
+        Logger::info("Loaded locale: {}", locale);
+    }
+    catch (const std::exception& e)
+    {
+        Logger::error("Exception while loading locale {}: {}", locale, e.what());
+    }
+    catch (...)
+    {
+        Logger::error("Unknown exception while loading locale {}", locale);
+    }
 }
 
 void loadTranslations()
 {
-    loadLocale(LOCALE_DEFAULT, &defaultLocale);
+    try
+    {
+        loadLocale(LOCALE_DEFAULT, &defaultLocale);
 
-    std::string currentLocaleName = Application::getLocale();
-    if (currentLocaleName != LOCALE_DEFAULT)
-        loadLocale(currentLocaleName, &currentLocale);
+        std::string currentLocaleName = Application::getLocale();
+        if (currentLocaleName != LOCALE_DEFAULT)
+            loadLocale(currentLocaleName, &currentLocale);
+    }
+    catch (const std::exception& e)
+    {
+        Logger::error("Failed to load translations: {}", e.what());
+    }
+    catch (...)
+    {
+        Logger::error("Failed to load translations: unknown exception");
+    }
 }
 
 namespace internal

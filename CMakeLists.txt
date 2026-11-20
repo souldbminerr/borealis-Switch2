@@ -140,16 +140,69 @@ elseif (PLATFORM_PS4)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/ps4/resources
     )
     add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}.data)
-elseif (PLATFORM_SWITCH)
-    if (USE_DEKO3D)
+elseif (PLATFORM_SWITCH OR PLATFORM_SWITCH2)
+    if (BOREALIS_USE_DEKO3D AND NOT PLATFORM_SWITCH2)
         gen_dksh("${PROJECT_RESOURCES}/shaders")
     endif ()
-    add_custom_target(${PROJECT_NAME}.nro DEPENDS ${PROJECT_NAME}
-        COMMAND ${NX_NACPTOOL_EXE} --create "${PROJECT_NAME}" "${PROJECT_AUTHOR}" "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_ALTER}" ${PROJECT_NAME}.nacp --titleid=${PROJECT_TITLEID}
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} ${CMAKE_BINARY_DIR}/resources
-        COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/resources/font
-        COMMAND ${NX_ELF2NRO_EXE} ${PROJECT_NAME}.elf ${PROJECT_NAME}.nro --icon=${PROJECT_ICON} --nacp=${PROJECT_NAME}.nacp --romfsdir=${CMAKE_BINARY_DIR}/resources
-    )
+
+    if (NOT DEFINED NX_NACPTOOL_EXE)
+        if (PLATFORM_SWITCH2)
+            find_program(NX_NACPTOOL_EXE nacptool
+                HINTS "${DEVKITPRO}/libounce/bin" "${DEVKITPRO}/tools/bin"
+                PATH_SUFFIXES bin)
+        else ()
+            find_program(NX_NACPTOOL_EXE nacptool HINTS "${DEVKITPRO}/tools/bin")
+        endif ()
+    endif ()
+    if (NOT DEFINED NX_ELF2NRO_EXE)
+        if (PLATFORM_SWITCH2)
+            find_program(NX_ELF2NRO_EXE elf2nro
+                HINTS "${DEVKITPRO}/libounce/bin" "${DEVKITPRO}/tools/bin"
+                PATH_SUFFIXES bin)
+        else ()
+            find_program(NX_ELF2NRO_EXE elf2nro HINTS "${DEVKITPRO}/tools/bin")
+        endif ()
+    endif ()
+
+    set(_NACP_TITLEID_ARGS)
+    if (DEFINED PROJECT_TITLEID)
+        set(_NACP_TITLEID_ARGS --titleid=${PROJECT_TITLEID})
+    endif ()
+
+    set(_SWITCH_ROMFS_DIR "${CMAKE_BINARY_DIR}/resources")
+
+    if (PLATFORM_SWITCH2 AND BOREALIS_USE_DEKO3D)
+        # Match ouncefin/switchfin: generate Ampere DKSH at packaging time with uam2.
+        find_program(NX_UAM2_EXE NAMES uam2 uam HINTS "${DEVKITPRO}/tools/bin")
+        if (NOT NX_UAM2_EXE)
+            message(FATAL_ERROR "PLATFORM_SWITCH2 with drako3d/deko3d needs uam2 (or uam) in ${DEVKITPRO}/tools/bin")
+        endif ()
+        set(_DKSH_SRC "${BOREALIS_LIBRARY}/lib/extern/nanovg/deko3d/shaders")
+
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${NX_NACPTOOL_EXE} --create "${PROJECT_NAME}" "${PROJECT_AUTHOR}" "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_ALTER}" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.nacp" ${_NACP_TITLEID_ARGS}
+            COMMAND ${CMAKE_COMMAND} -E remove_directory "${_SWITCH_ROMFS_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} "${_SWITCH_ROMFS_DIR}"
+            COMMAND ${CMAKE_COMMAND} -DSWITCH_ROMFS_DIR=${_SWITCH_ROMFS_DIR} -P "${BOREALIS_LIBRARY}/cmake/clean_switch2_romfs_fonts.cmake"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${_SWITCH_ROMFS_DIR}/shaders"
+            COMMAND ${NX_UAM2_EXE} -s vert -o "${_SWITCH_ROMFS_DIR}/shaders/fill_vsh.dksh" "${_DKSH_SRC}/fill_vsh.glsl"
+            COMMAND ${NX_UAM2_EXE} -s frag -o "${_SWITCH_ROMFS_DIR}/shaders/fill_fsh.dksh" "${_DKSH_SRC}/fill_fsh.glsl"
+            COMMAND ${NX_UAM2_EXE} -s frag -o "${_SWITCH_ROMFS_DIR}/shaders/fill_aa_fsh.dksh" "${_DKSH_SRC}/fill_aa_fsh.glsl"
+            COMMAND ${NX_ELF2NRO_EXE} "$<TARGET_FILE:${PROJECT_NAME}>" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.nro" --icon=${PROJECT_ICON} --nacp=${CMAKE_BINARY_DIR}/${PROJECT_NAME}.nacp --romfsdir=${_SWITCH_ROMFS_DIR}
+            COMMENT "Packaging ${PROJECT_NAME}.nro (Switch 2, drako3d)"
+        )
+    else ()
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${NX_NACPTOOL_EXE} --create "${PROJECT_NAME}" "${PROJECT_AUTHOR}" "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_ALTER}" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.nacp" ${_NACP_TITLEID_ARGS}
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${PROJECT_RESOURCES} "${_SWITCH_ROMFS_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E remove_directory "${_SWITCH_ROMFS_DIR}/font"
+            COMMAND ${NX_ELF2NRO_EXE} "$<TARGET_FILE:${PROJECT_NAME}>" "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.nro" --icon=${PROJECT_ICON} --nacp=${CMAKE_BINARY_DIR}/${PROJECT_NAME}.nacp --romfsdir=${_SWITCH_ROMFS_DIR}
+            VERBATIM
+            COMMENT "Packaging ${PROJECT_NAME}.nro"
+        )
+    endif ()
+
+    add_custom_target(${PROJECT_NAME}.nro DEPENDS ${PROJECT_NAME})
 elseif (PLATFORM_IOS)
     ios_bundle(
             "${CMAKE_CURRENT_SOURCE_DIR}/demo/ios/iphoneos/Splash.storyboard"

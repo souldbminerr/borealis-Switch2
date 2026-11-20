@@ -158,9 +158,15 @@ void ScrollingFrame::naturalScrollingBehaviour()
         // If current focus view is outside scrolling bounds,
         // change focus to this.
         View* currentFocus = Application::getCurrentFocus();
-        if (!currentFocus->getFrame().inscribed(getFrame()))
+        if (!currentFocus)
         {
             Application::giveFocus(this);
+            currentFocus = Application::getCurrentFocus();
+        }
+        if (currentFocus && !currentFocus->getFrame().inscribed(getFrame()))
+        {
+            Application::giveFocus(this);
+            currentFocus = Application::getCurrentFocus();
         }
 
         // If current focus equals this (a.k. no focus inside scroll),
@@ -205,7 +211,7 @@ void ScrollingFrame::naturalScrollingBehaviour()
         // If there is focus inside scroll, and navigation buttons are not pressed
         // disable natural scrolling
         View* currentFocus = Application::getCurrentFocus();
-        if (!state.buttons[BUTTON_NAV_DOWN] && !state.buttons[BUTTON_NAV_UP] && (currentFocus != this))
+        if (!state.buttons[BUTTON_NAV_DOWN] && !state.buttons[BUTTON_NAV_UP] && (currentFocus && currentFocus != this))
         {
             naturalScrollingCanScroll = false;
         }
@@ -221,6 +227,9 @@ void ScrollingFrame::naturalScrollingBehaviour()
 
 View* ScrollingFrame::findTopMostFocusableView()
 {
+    if (!contentView)
+        return nullptr;
+
     Rect frame       = getFrame();
     Point check      = Point(frame.getMidX(), frame.getMinY());
     View* focusCheck = contentView->hitTest(check);
@@ -232,7 +241,10 @@ View* ScrollingFrame::findTopMostFocusableView()
 
         while (focusCheck && !focusCheck->getFrame().inscribed(frame))
         {
-            focusCheck = focusCheck->getParent()->getNextFocus(FocusDirection::DOWN, focusCheck);
+            View* parent = focusCheck->getParent();
+            if (!parent)
+                break;
+            focusCheck = parent->getNextFocus(FocusDirection::DOWN, focusCheck);
         }
 
         return focusCheck;
@@ -261,11 +273,22 @@ void ScrollingFrame::naturalScrollingButtonProcessing(FocusDirection focusDirect
     }
 
     setContentOffsetY(newOffset, false);
+
     View* current = Application::getCurrentFocus();
-    View* next    = current->getParent()->getNextFocus(focusDirection, current);
+    if (!current)
+    {
+        Application::giveFocus(this);
+        current = Application::getCurrentFocus();
+        if (!current)
+            return;
+    }
+
+    View* parent = current->getParent();
+    View* next   = parent ? parent->getNextFocus(focusDirection, current) : nullptr;
     if (next)
     {
-        if (current != next->getDefaultFocus())
+        View* nextDefault = next->getDefaultFocus();
+        if (current != (nextDefault ? nextDefault : next))
         {
             Application::giveFocus(next);
             if (next != this)
@@ -280,7 +303,9 @@ void ScrollingFrame::naturalScrollingButtonProcessing(FocusDirection focusDirect
     if (isBorder && !*repeat)
     {
         *repeat = true;
-        Application::getCurrentFocus()->shakeHighlight(focusDirection);
+        View* focus = Application::getCurrentFocus();
+        if (focus)
+            focus->shakeHighlight(focusDirection);
         Application::getAudioPlayer()->play(SOUND_FOCUS_ERROR);
     }
 }
@@ -452,14 +477,18 @@ View* ScrollingFrame::getDefaultFocus()
 {
     if (behavior == ScrollingBehavior::CENTERED)
     {
-        View* focus = contentView->getDefaultFocus();
-        if (focus)
-            return focus;
-        else
-            return Box::getDefaultFocus();
+        if (contentView)
+        {
+            View* focus = contentView->getDefaultFocus();
+            if (focus)
+                return focus;
+        }
+        return Box::getDefaultFocus();
     }
 
-    View* focus = contentView->getDefaultFocus();
+    View* focus = nullptr;
+    if (contentView)
+        focus = contentView->getDefaultFocus();
     if (focus && focus->getFrame().inscribed(getFrame()))
         return focus;
 

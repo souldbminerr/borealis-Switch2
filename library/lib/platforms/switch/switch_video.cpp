@@ -28,9 +28,9 @@ limitations under the License.
 #define DOCKED_WIDTH 1920.f
 #define DOCKED_HEIGHT 1080.f
 
-#define IMAGES_POOL_SIZE 4 * 1024 * 1024
-#define CODE_POOL_SIZE 128 * 1024
-#define DATA_POOL_SIZE 1 * 1024 * 1024
+#define IMAGES_POOL_SIZE (8 * 1024 * 1024)
+#define CODE_POOL_SIZE (512 * 1024)
+#define DATA_POOL_SIZE (4 * 1024 * 1024)
 
 namespace brls
 {
@@ -39,6 +39,7 @@ static constexpr const unsigned STATIC_CMD_SIZE = 0x1000;
 
 SwitchVideoContext::SwitchVideoContext()
 {
+    Logger::info("SwitchVideoContext: init start");
     // Get display resolution change event
     Result rc = appletGetDefaultDisplayResolutionChangeEvent(&this->defaultDisplayResolutionChangeEvent);
 
@@ -50,12 +51,15 @@ SwitchVideoContext::SwitchVideoContext()
     }
 
     // Setup scaling
+    Logger::info("SwitchVideoContext: updateWindowSize");
     this->updateWindowSize();
 
     // Init deko
+    Logger::info("SwitchVideoContext: creating device/queue");
     this->device = dk::DeviceMaker {}.create();
     this->queue  = dk::QueueMaker { this->device }.setFlags(DkQueueFlags_Graphics).create();
 
+    Logger::info("SwitchVideoContext: creating pools/cmdbuf");
     this->imagesPool.emplace(device, DkMemBlockFlags_GpuCached | DkMemBlockFlags_Image, IMAGES_POOL_SIZE);
     this->codePool.emplace(device, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached | DkMemBlockFlags_Code, CODE_POOL_SIZE);
     this->dataPool.emplace(device, DkMemBlockFlags_CpuUncached | DkMemBlockFlags_GpuCached, DATA_POOL_SIZE);
@@ -65,15 +69,18 @@ SwitchVideoContext::SwitchVideoContext()
     cmdbuf.addMemory(cmdmem.getMemBlock(), cmdmem.getOffset(), cmdmem.getSize());
 
     // Create framebuffer resources
+    Logger::info("SwitchVideoContext: creating framebuffer resources");
     this->createFramebufferResources();
 
     // Create renderer and nvg context
+    Logger::info("SwitchVideoContext: creating renderer/nvg context");
     this->renderer.emplace(this->framebufferWidth, this->framebufferHeight, this->device, this->queue, *this->imagesPool, *this->codePool, *this->dataPool);
     this->nvgContext = nvgCreateDk(&*this->renderer, NVG_ANTIALIAS | NVG_STENCIL_STROKES);
 
     Application::setWindowSize(this->framebufferWidth, this->framebufferHeight);
 
     setSwapInterval(VideoContext::swapInterval);
+    Logger::info("SwitchVideoContext: init done");
 }
 
 void SwitchVideoContext::createFramebufferResources()

@@ -66,6 +66,30 @@ static void on_applet_hook(AppletHookType hook, void* arg)
 
 SwitchPlatform::SwitchPlatform()
 {
+    #ifdef __SWITCH2__
+    hidSetTouchScreenOutputRanges(1920, 1080);
+    #endif
+    {
+        Result rc = romfsInit();
+        if (R_FAILED(rc))
+            Logger::warning("romfsInit failed: {:#x}", (unsigned)rc);
+        else
+            Logger::info("romfsInit succeeded");
+    }
+    {
+        Result rc = plInitialize(PlServiceType_User);
+        if (R_FAILED(rc))
+            Logger::warning("plInitialize failed: {:#x}", (unsigned)rc);
+        else
+            Logger::info("plInitialize succeeded");
+    }
+    setsysInitialize();
+    setInitialize();
+    psmInitialize();
+    nifmInitialize(NifmServiceType_User);
+    lblInitialize();
+    hidsysInitialize();
+
     // Cache theme variant before video context init
     // The background color is created once in the "static" command list
     // executed every frame, so we need to know the background color
@@ -114,6 +138,7 @@ SwitchPlatform::SwitchPlatform()
 
 void SwitchPlatform::createWindow(std::string windowTitle, uint32_t windowWidth, uint32_t windowHeight, float windowXPos, float windowYPos)
 {
+    Logger::info("SwitchPlatform: creating video context");
 #ifdef BOREALIS_USE_DEKO3D
     this->videoContext = new SwitchVideoContext();
 #elif defined(__SDL2__)
@@ -121,9 +146,12 @@ void SwitchPlatform::createWindow(std::string windowTitle, uint32_t windowWidth,
 #else
     this->videoContext = new GLFWVideoContext(windowTitle, windowWidth, windowHeight);
 #endif
+    Logger::info("SwitchPlatform: video context created");
 
     // Reinitialise controllers with settings from borealis, not by GLFW or SDL
+    Logger::info("SwitchPlatform: creating input manager");
     this->inputManager = new SwitchInputManager();
+    Logger::info("SwitchPlatform: input manager created");
 }
 
 bool SwitchPlatform::canShowBatteryLevel()
@@ -247,7 +275,11 @@ void SwitchPlatform::openBrowser(std::string url)
 
 std::string SwitchPlatform::getName()
 {
+#ifdef __SWITCH2__
+    return "Switch 2";
+#else
     return "Switch";
+#endif
 }
 
 bool SwitchPlatform::mainLoopIteration()
@@ -306,6 +338,15 @@ SwitchPlatform::~SwitchPlatform()
     delete this->imeManager;
 
     appletUnhook(&applet_hook_cookie);
+
+    hidsysExit();
+    lblExit();
+    nifmExit();
+    psmExit();
+    setExit();
+    setsysExit();
+    plExit();
+    romfsExit();
 }
 
 } // namespace brls

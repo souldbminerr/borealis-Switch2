@@ -91,11 +91,14 @@ bool Application::init()
     Logger::info("Using platform {}", platform->getName());
 
     // Init i18n
+    Logger::info("Application: loading translations");
     loadTranslations();
 
+    Logger::info("Application: starting threading");
     Threading::start();
 
     Application::inited = true;
+    Logger::info("Application: init done");
 
     return true;
 }
@@ -108,6 +111,7 @@ void Application::createWindow(std::string windowTitle)
         return;
     }
 
+    Logger::info("Application: creating platform window");
     if (VideoContext::sizeW == 0 || VideoContext::sizeH == 0)
     {
         // Create a window with a default size and position
@@ -119,6 +123,7 @@ void Application::createWindow(std::string windowTitle)
         Application::getPlatform()->createWindow(windowTitle, VideoContext::sizeW, VideoContext::sizeH,
             VideoContext::posX, VideoContext::posY);
     }
+    Logger::info("Application: platform window created");
 
     // Load most commonly used sounds
     AudioPlayer* audioPlayer = Application::getAudioPlayer();
@@ -151,6 +156,7 @@ void Application::createWindow(std::string windowTitle)
         if (eventType == facebook::yoga::Event::NodeLayout)
             view->onLayout(); });
 
+    Logger::info("Application: loading fonts");
     // Load fonts and setup fallbacks
     Application::platform->getFontLoader()->loadFonts();
 
@@ -158,6 +164,7 @@ void Application::createWindow(std::string windowTitle)
     Application::registerBuiltInXMLViews();
 
     Application::getWindowCreationDoneEvent()->fire();
+    Logger::info("Application: window creation done");
 }
 
 bool Application::mainLoop()
