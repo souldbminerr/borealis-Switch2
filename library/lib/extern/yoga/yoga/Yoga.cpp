@@ -14,7 +14,7 @@
 #include <yoga/Yoga.h>
 
 #include "log.h"
-#include "Utils.h"
+#include "YogaUtils.h"
 #include "YGNode.h"
 #include "YGNodePrint.h"
 #include "Yoga-internal.h"

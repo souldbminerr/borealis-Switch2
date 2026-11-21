@@ -14,7 +14,7 @@
 #include "YGNodePrint.h"
 #include "YGNode.h"
 #include "Yoga-internal.h"
-#include "Utils.h"
+#include "YogaUtils.h"
 
 namespace facebook {
 namespace yoga {

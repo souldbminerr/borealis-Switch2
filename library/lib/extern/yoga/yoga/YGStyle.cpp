@@ -6,7 +6,7 @@
  */
 
 #include "YGStyle.h"
-#include "Utils.h"
+#include "YogaUtils.h"
 
 // Yoga specific properties, not compatible with flexbox specification
 bool operator==(const YGStyle& lhs, const YGStyle& rhs) {

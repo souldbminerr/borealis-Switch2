@@ -8,7 +8,7 @@
 #include "YGNode.h"
 #include <algorithm>
 #include <iostream>
-#include "Utils.h"
+#include "YogaUtils.h"
 
 using namespace facebook;
 using facebook::yoga::detail::CompactValue;
