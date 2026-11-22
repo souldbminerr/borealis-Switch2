@@ -240,6 +240,7 @@ class RecyclerFrame : public ScrollingFrame
     RecyclerDataSource* dataSource = nullptr;
     bool deleteDataSource          = false;
     bool layouted                  = false;
+    float oldWidth                 = -1;
 
     uint32_t visibleMin, visibleMax;
 
