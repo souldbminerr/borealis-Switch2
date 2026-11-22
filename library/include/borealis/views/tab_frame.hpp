@@ -21,6 +21,7 @@
 #include <borealis/views/applet_frame.hpp>
 #include <borealis/views/sidebar.hpp>
 #include <functional>
+#include <vector>
 
 namespace brls
 {
@@ -28,11 +29,12 @@ namespace brls
 typedef std::function<View*(void)> TabViewCreator;
 
 // An applet frame containing a sidebar on the left with multiple tabs which content is showing on the right.
-// Only one tab is kept in memory at all times : when switching, the current tab is freed before the the new one is instantiated.
+// Tabs are cached after first creation to avoid expensive rebuilds when switching.
 class TabFrame : public Box
 {
   public:
     TabFrame();
+    ~TabFrame() override;
 
     void handleXMLElement(tinyxml2::XMLElement* element) override;
 
@@ -47,6 +49,8 @@ class TabFrame : public Box
     BRLS_BIND(Sidebar, sidebar, "brls/tab_frame/sidebar");
 
     View* activeTab = nullptr;
+    std::vector<TabViewCreator> tabCreators;
+    std::vector<View*> cachedTabs;
 };
 
 } // namespace brls

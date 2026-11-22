@@ -49,40 +49,72 @@ TabFrame::TabFrame()
     this->inflateFromXMLString(tabFrameContentXML);
 }
 
+TabFrame::~TabFrame()
+{
+    // Detach active tab from Box children so ~Box doesn't double-free it;
+    // we own all cached tabs ourselves.
+    if (this->activeTab)
+    {
+        this->removeView(this->activeTab, false);
+        this->activeTab = nullptr;
+    }
+    for (View* tab : this->cachedTabs)
+    {
+        if (tab)
+            tab->freeView();
+    }
+    this->cachedTabs.clear();
+}
+
 void TabFrame::addTab(std::string label, TabViewCreator creator)
 {
-    this->sidebar->addItem(label, [this, creator](brls::View* view) {
+    size_t tabIndex = this->tabCreators.size();
+    this->tabCreators.push_back(creator);
+    this->cachedTabs.push_back(nullptr);
+
+    this->sidebar->addItem(label, [this, tabIndex](brls::View* view) {
         // Only trigger when the sidebar item gains focus
         if (!view->isFocused())
             return;
 
-        // Remove the existing tab if it exists
+        if (tabIndex >= this->cachedTabs.size())
+            return;
+
+        View* cached = this->cachedTabs[tabIndex];
+        if (cached == this->activeTab && this->activeTab != nullptr)
+            return;
+
+        // Detach current tab without deleting (cached)
         if (this->activeTab)
         {
-            this->removeView(this->activeTab); // will call willDisappear and delete
+            this->removeView(this->activeTab, false);
             this->activeTab = nullptr;
         }
 
-        // Add the new tab
-        View* newContent = creator();
-
+        // Create or reuse cached tab
+        View* newContent = cached;
         if (!newContent)
-            return;
+        {
+            newContent = this->tabCreators[tabIndex] ? this->tabCreators[tabIndex]() : nullptr;
+            if (!newContent)
+                return;
 
-        newContent->setGrow(1.0f);
+            newContent->setGrow(1.0f);
+            newContent->registerAction(
+                "hints/back"_i18n, BUTTON_B, [this](View* view) {
+                    if (Application::getInputType() == InputType::TOUCH)
+                        this->dismiss();
+                    else
+                        Application::giveFocus(this->sidebar);
+                    return true;
+                },
+                false, false, SOUND_BACK);
+
+            this->cachedTabs[tabIndex] = newContent;
+        }
+
         this->addView(newContent); // addView calls willAppear
-
         this->activeTab = newContent;
-
-        newContent->registerAction(
-            "hints/back"_i18n, BUTTON_B, [this](View* view) {
-                if (Application::getInputType() == InputType::TOUCH)
-                    this->dismiss();
-                else
-                    Application::giveFocus(this->sidebar);
-                return true;
-            },
-            false, false, SOUND_BACK);
     });
 }
 
@@ -93,6 +125,18 @@ void TabFrame::focusTab(int position)
 
 void TabFrame::clearTabs()
 {
+    if (this->activeTab)
+    {
+        this->removeView(this->activeTab, false);
+        this->activeTab = nullptr;
+    }
+    for (View* tab : this->cachedTabs)
+    {
+        if (tab)
+            tab->freeView();
+    }
+    this->cachedTabs.clear();
+    this->tabCreators.clear();
     this->sidebar->clearItems();
 }
 
