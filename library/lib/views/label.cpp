@@ -83,18 +83,8 @@ static YGSize labelMeasureFunc(YGNodeRef node, float width, YGMeasureMode widthM
     };
 
     if (fullText.empty()) {
-        if (widthMode == YGMeasureModeExactly && heightMode == YGMeasureModeExactly)
-        {
-            return size;
-        }
-        else if (heightMode == YGMeasureModeExactly)
-        {
-            size.width = 0;
-        }
-        else if (widthMode == YGMeasureModeExactly)
-        {
-            size.height = 0;
-        }
+        size.width  = widthMode == YGMeasureModeExactly ? width : 0;
+        size.height = heightMode == YGMeasureModeExactly ? height : 0;
         return size;
     }
 
