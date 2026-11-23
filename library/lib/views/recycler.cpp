@@ -256,6 +256,8 @@ void RecyclerFrame::reloadData()
     {
         cacheCellFrames();
         Rect frame  = getLocalFrame();
+        frame.origin.x = 0;
+        frame.origin.y = 0;
         int counter = 0;
         for (int section = 0; section < dataSource->numberOfSections(this); section++)
         {
@@ -381,6 +383,8 @@ bool RecyclerFrame::checkWidth()
 void RecyclerFrame::cellsRecyclingLoop()
 {
     Rect visibleFrame = getVisibleFrame();
+    visibleFrame.origin.x = 0;
+    visibleFrame.origin.y = this->contentOffsetY;
 
     while (true)
     {
