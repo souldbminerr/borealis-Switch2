@@ -103,7 +103,7 @@ static ThemeValues darkThemeValues = {
 
     // Sidebar
     { "brls/sidebar/background", nvgRGB(60, 60, 60) },
-    { "brls/sidebar/active_item", nvgRGB(0, 255, 204) },
+    { "brls/sidebar/active_item", nvgRGB(32, 203, 255) },
     { "brls/sidebar/separator", nvgRGB(108, 108, 108) },
 
     // Header
